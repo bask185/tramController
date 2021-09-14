@@ -86,21 +86,24 @@ void updateSpeed()
     if( speed > setPoint ) speed -- ;
     
     throttle.setSpeed( speed ) ;
+    
+    Serial.print(F("speed: ")) ;
+    Serial.println( speed ) ;
     END_REPEAT
     
     throttle.update() ;
 } 
 
 // STATE FUNCTIONS
-
 /* 
 Read all 3 buttons and determen which train should drive.
-also handles LEDs, the relay and sets the points
+also sets LEDs, relay and points
 */
 StateFunction( readButtons )
 {
     if( sm.entryState() )
     {
+        Serial.println(F("train is ready to depart!")) ;
         if( autoManualState  == HIGH )              // in manual mode, turn on both LEDs
         {
             digitalWrite( statusLedFront, HIGH ) ;
@@ -122,22 +125,32 @@ StateFunction( readButtons )
     {
         if( frontBtnState == RISING )
         {
+            Serial.println(F("front track is go")) ;
             digitalWrite( relayPin, FRONT_SIDE ) ;  
             digitalWrite(  statusLedRear, LOW ) ;  // set relay and turn other led OFF
-            leftPoint.setState( 0 ) ;
-            rightPoint.setState( 0 ) ;
         }
         if(  rearBtnState == RISING )
         {
+            Serial.println(F("rear track is go")) ;
             digitalWrite( relayPin,  REAR_SIDE ) ;
             digitalWrite( statusLedFront, LOW ) ;
-            leftPoint.setState( 1 ) ;
-            rightPoint.setState( 1 ) ;
         }
-        
         if( autoManualState  == LOW ) 
         {
+            Serial.println(F("automatic mode enabled")) ;
             digitalWrite( relayPin, !digitalRead( relayPin ) ) ; // if driving in automatic mode, just toggle the relay and turn both LEDs OFF
+        }
+        
+        Serial.println(F(" setting points ")) ;
+        if( digitalRead( relayPin ) == FRONT_SIDE )
+        {
+            leftPoint.setState( 1 ) ;
+            leftPoint.setState( 1 ) ;
+        }
+        else
+        {
+            leftPoint.setState( 0 ) ;
+            leftPoint.setState( 0 ) ;
         }
     }
     return sm.endState() ;
@@ -154,6 +167,7 @@ StateFunction( accelerateTrain )
         int sample = analogRead( speedPin ) ;
         setPoint = map( sample, 0 ,1023, 20, 100 ) ; // speed is set between 20 - 100 %
         speedInterval = 50 ;                         //  50ms between speed increments -> 20 updates per second, max 5 second acceleration at top speed.
+        Serial.println(F("points are set\r\ntrain departing")) ;
     }
     if( sm.onState() )
     {
@@ -161,7 +175,7 @@ StateFunction( accelerateTrain )
     }
     if( sm.exitState() )
     {
-        
+        Serial.println(F("train has left the station")) ;
     }
     return sm.endState() ;
 }
@@ -181,7 +195,7 @@ StateFunction( waitArrival )
     }
     if( sm.exitState() )
     {
-        
+        Serial.println(F("train has reached the station")) ;
     }
     return sm.endState() ;
 }
@@ -202,6 +216,8 @@ StateFunction( slowDownTrain )
         speedInterval = map( sample, 0 ,1023, 1, 50 ) ;                         // determen brakespeed, depended of relay state
         
         setPoint = 0 ;                                                          // stop train
+        
+        Serial.println(F("slowing down train")) ;
     }
     if( sm.onState() )
     {
@@ -211,6 +227,8 @@ StateFunction( slowDownTrain )
     {
         digitalWrite( statusLedFront, LOW ) ;                                   // turn of leds, to indicate that there is a delay
         digitalWrite(  statusLedRear, LOW ) ;
+        
+        Serial.println(F("train has stopped, restarting cycle")) ;
     }
     return sm.endState() ;
 }
