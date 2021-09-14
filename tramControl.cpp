@@ -145,12 +145,12 @@ StateFunction( readButtons )
         if( digitalRead( relayPin ) == FRONT_SIDE )
         {
             leftPoint.setState( 1 ) ;
-            leftPoint.setState( 1 ) ;
+            leftPoint.setState( 0 ) ;
         }
         else
         {
             leftPoint.setState( 0 ) ;
-            leftPoint.setState( 0 ) ;
+            leftPoint.setState( 1 ) ;
         }
     }
     return sm.endState() ;
@@ -187,7 +187,7 @@ StateFunction( waitArrival )
 {
     if( sm.entryState() )
     {
-        
+        Serial.println(F("waiting for train to reach the station again")) ;
     }
     if( sm.onState() )
     {
@@ -250,7 +250,7 @@ extern uint8_t tramControl()
         sm.nextState( accelerateTrain, 300 ) ; } // short delay to set the points
 
     State(accelerateTrain) {
-        sm.nextState( waitArrival, 0 ) ; }
+        sm.nextState( waitArrival, 1000 ) ; } // 1 second delay to ensure the sensor won't bounce or something
 
     State(waitArrival) {
         sm.nextState( slowDownTrain, 0 ) ; }
