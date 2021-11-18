@@ -14,11 +14,19 @@ void Weistra::begin() {
     trackPin    = digitalPinToBitMask( trackPin );
     portx_p     = portOutputRegister( port );
 
+    power = true ;
+
 }
 
 void Weistra::update() {
     static byte counter = 0;
     static uint32_t prevTime = 0;
+
+    if( power == false )
+    {
+        *portx_p &= ~trackPin ;
+        return ;
+    }
 
     if( portx_p != 0 ) {
         uint32_t currentTime = micros()/* & 0x0000FFFF*/; // we only use the last 2 bytes of micros()
@@ -51,3 +59,7 @@ void Weistra::setSpeed(byte speed) {
     intervalTime = 10000 / frequency; // > between 100us and 500us
  }
 
+void Weistra::stop() {
+    *portx_p &= ~trackPin ;
+    power = false ;
+}

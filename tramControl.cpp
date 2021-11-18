@@ -43,6 +43,7 @@ StateMachine sm ;
 
 // VARIABLES
 uint32_t speedInterval ;
+uint32_t shorCircuitInterval = 5 ;
 uint8_t frontBtnState, rearBtnState, autoManualState, detectorState ;
 uint8_t setPoint, speed ;
 
@@ -92,7 +93,47 @@ void updateSpeed()
     END_REPEAT
     
     throttle.update() ;
-} 
+}
+
+#define MAX_CURRENT 120   // (1A, 0.5R shunt resistors gives 0.5V 0.5/5V -->  1023 / 10 = 120 ADC sample)
+void shorCircuit()
+{
+    static uint8_t counter = 10 ;
+    if( digitalRead( throttlePin ) == false && power == true ) return ;         // if power is enabled and the throttle pin is in the OFF cycle , return 
+                                                                                // we can only measure current if the throttle pin in in ON cycle
+
+    REPEAT_MS( shorCircuitInterval ) ;                                          // take ADC sample every 5ms, 10x overcurrent -> short circuit
+
+    int sample = analogRead( shortCircuitPin ) ;
+
+    if( power )
+    {
+        shorCircuitInterval = 5 ;                                               // keep setting interval at 5ms
+
+        if( sample >= MAX_CURRENT ) 
+        {
+            if( counter ) counter -- ;                                          // if overcurrent, keep decrementing counter
+        }
+        else
+        {
+            counter = 10 ;                                                      // no more overcurrent, keep setting counter at 10
+        }
+        if( counter == 0 )
+        {
+            shorCircuitInterval = 5000 ;                                        // cut off power for atleast 5 seconds
+            power = false ;
+            throttle.stop() ;
+        }
+    }
+    else
+    {
+        shorCircuitInterval = 5 ;                                               // enable power again, and set interval at 5ms again
+        power = true ;                                                
+        throttle.begin() ;
+    }
+
+    END_REPEAT
+}
 
 // STATE FUNCTIONS
 /* 
@@ -238,6 +279,7 @@ StateFunction( slowDownTrain )
 extern uint8_t tramControl()
 {
     debounceInput() ;
+    shorCircuit() ;
     updateSpeed() ;
     
     leftPoint.sweep() ;
