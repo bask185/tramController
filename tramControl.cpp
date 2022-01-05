@@ -1,13 +1,13 @@
 // HEADER FILES
 #include <Arduino.h>
 #include "tramControl.h"
-#include "src/modules/servoSweep.h"
-#include "src/basics/macros.h"
-#include "src/basics/io.h"
-#include "src/basics/stateMachineClass.h"
-#include "src/modules/weistra.h"
-#include "src/modules/debounceClass.h"
-#include "src/basics/macros.h"
+#include "src/servoSweep.h"
+#include "src/macros.h"
+#include "src/io.h"
+#include "src/stateMachineClass.h"
+#include "src/weistra.h"
+#include "src/debounceClass.h"
+#include "src/macros.h"
 
 enum tramControlStates_
 {
@@ -26,6 +26,7 @@ Debounce autoManualBtn( rearSwPin ) ;
 Debounce detector( detectorPin ) ;
 
 Weistra throttle( throttlePin ) ;
+bool power ;
                                 //   min  max spd  turn off
 ServoSweep  leftPoint(  leftServoPin, 75, 105, 10, 1 ) ;
 ServoSweep rightPoint( rightServoPin, 75, 105, 10, 1 ) ;
@@ -57,6 +58,10 @@ extern void tramControlInit(void)
     leftPoint.setState( 0 ) ;
     rightPoint.setState( 0 ) ;
     sm.nextState( beginState, 0 ) ;
+
+    frontBtn.debounceInputs() ;
+    rearBtn.debounceInputs() ;
+    autoManualBtn.debounceInputs() ;
 }
 
 static void debounceInput()
@@ -82,15 +87,21 @@ static void debounceInput()
 
 void updateSpeed()
 {
-    REPEAT_MS( speedInterval ) ;
-    if( speed < setPoint ) speed ++ ;
-    if( speed > setPoint ) speed -- ;
-    
-    throttle.setSpeed( speed ) ;
-    
-    Serial.print(F("speed: ")) ;
-    Serial.println( speed ) ;
-    END_REPEAT
+    REPEAT_MS( speedInterval )
+    {
+        if( speed < setPoint ) speed ++ ;
+        if( speed > setPoint ) speed -- ;
+        
+        static uint8_t speedPrev ;
+
+        if( speed != speedPrev)
+        {   speedPrev = speed ;
+            throttle.setSpeed( speed ) ;
+            
+            // Serial.print(F("speed: ")) ;
+            // Serial.println( speed ) ;
+        }
+    } END_REPEAT
     
     throttle.update() ;
 }
@@ -187,11 +198,15 @@ StateFunction( readButtons )
         {
             leftPoint.setState( 1 ) ;
             leftPoint.setState( 0 ) ;
+            digitalWrite( IN1, HIGH ) ;
+            digitalWrite( IN2,  LOW ) ;
         }
         else
         {
             leftPoint.setState( 0 ) ;
             leftPoint.setState( 1 ) ;
+            digitalWrite( IN1, HIGH ) ;
+            digitalWrite( IN2,  LOW ) ;
         }
     }
     return sm.endState() ;
@@ -279,13 +294,15 @@ StateFunction( slowDownTrain )
 extern uint8_t tramControl()
 {
     debounceInput() ;
-    shorCircuit() ;
+    //shorCircuit() ;
     updateSpeed() ;
     
     leftPoint.sweep() ;
     rightPoint.sweep() ;
         
-    
+    if( detectorState == LOW ) digitalWrite( statusLedRear, HIGH ) ;
+    if( detectorState == HIGH ) digitalWrite( statusLedRear, LOW ) ;
+
     STATE_MACHINE_BEGIN
 
     State(readButtons) {
