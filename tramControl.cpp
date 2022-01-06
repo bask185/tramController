@@ -19,11 +19,18 @@ enum tramControlStates_
     slowDownTrain
 } ;
 
+uint32_t timeStamp ;
+enum errors
+{
+    tramDepartureToLate ,
+    tramArrivalToLate,
+    shortCircuit,
+} ;
 
-Debounce frontBtn( auto_manualPin ) ;
-Debounce rearBtn( frontSwPin ) ; 
-Debounce autoManualBtn( rearSwPin ) ;
-Debounce detector( detectorPin ) ;
+
+Debounce frontBtn( frontSwPin ) ;
+Debounce rearBtn( rearSwPin ) ; 
+Debounce autoManualBtn( auto_manualPin) ;
 
 Weistra throttle( throttlePin ) ;
 bool power ;
@@ -43,7 +50,7 @@ StateMachine sm ;
 #define  REAR_SIDE LOW
 
 // VARIABLES
-uint32_t speedInterval ;
+uint32_t speedInterval = 100 ;
 uint32_t shorCircuitInterval = 5 ;
 uint8_t frontBtnState, rearBtnState, autoManualState, detectorState ;
 uint8_t setPoint, speed ;
@@ -66,23 +73,24 @@ extern void tramControlInit(void)
 
 static void debounceInput()
 {
-    if( digitalRead( throttlePin ) ) // we do not debounce the current sensing when the throttle pin is in the LOW side in a dutycycle
+    REPEAT_MS( 20 )
     {
-        REPEAT_MS( 50 ) ;
-        detector.debounceInputs() ;
-        END_REPEAT
-    }
-        
-    REPEAT_MS( 20 ) ;
-    frontBtn.debounceInputs() ;
-    rearBtn.debounceInputs() ;
-    autoManualBtn.debounceInputs() ;
-    END_REPEAT
+        static byte counter ;
+        if( digitalRead( detectorPin ) ) == LOW )                               // if the detector only even smells a train, the detector state is considered true
+            detectorState = true ;
+            counter = 10 ;                                                      // a timeout will be set at 10 x 20 = 200ms
+        }
+        if( counter ) counter -- ;                                              // decrement this counter every 20ms
+        if( counter == 0 ) detectorState = false ;                              // if the detector has not sensed a train for atleast 200ms, the detectorstate will be false
+
+        frontBtn.debounceInputs() ;
+        rearBtn.debounceInputs() ;
+        autoManualBtn.debounceInputs() ;
+    } END_REPEAT
     
-    frontBtnState = frontBtn.readInput() ;
-    rearBtnState = rearBtn.readInput() ;
+    frontBtnState   = frontBtn.readInput() ;
+    rearBtnState    = rearBtn.readInput() ;
     autoManualState = autoManualBtn.readInput() ;
-    detectorState = detector.readInput() ;
 }
 
 void updateSpeed()
@@ -106,11 +114,11 @@ void updateSpeed()
     throttle.update() ;
 }
 
-#define MAX_CURRENT 120   // (1A, 0.5R shunt resistors gives 0.5V 0.5/5V -->  1023 / 10 = 120 ADC sample)
+#define MAX_CURRENT 100                                                         // (1A, 0.5R shunt resistors gives 0.5V 0.5/5V -->  1023 / 10 = 120 ADC sample)
 void shorCircuit()
 {
     static uint8_t counter = 10 ;
-    if( digitalRead( throttlePin ) == false && power == true ) return ;         // if power is enabled and the throttle pin is in the OFF cycle , return 
+    if( digitalRead( throttlePin ) == false ) return ;                          // if power is enabled and the throttle pin is in the OFF cycle , return 
                                                                                 // we can only measure current if the throttle pin in in ON cycle
 
     REPEAT_MS( shorCircuitInterval ) ;                                          // take ADC sample every 5ms, 10x overcurrent -> short circuit
@@ -177,13 +185,13 @@ StateFunction( readButtons )
     {
         if( frontBtnState == RISING )
         {
-            Serial.println(F("front track is go")) ;
+            Serial.println(F("FRONT TRACK IS GO!!")) ;
             digitalWrite( relayPin, FRONT_SIDE ) ;  
             digitalWrite(  statusLedRear, LOW ) ;  // set relay and turn other led OFF
         }
-        if(  rearBtnState == RISING )
+        if( rearBtnState == RISING )
         {
-            Serial.println(F("rear track is go")) ;
+            Serial.println(F("REAR TRACK IS GO!!")) ;
             digitalWrite( relayPin,  REAR_SIDE ) ;
             digitalWrite( statusLedFront, LOW ) ;
         }
@@ -205,8 +213,8 @@ StateFunction( readButtons )
         {
             leftPoint.setState( 0 ) ;
             leftPoint.setState( 1 ) ;
-            digitalWrite( IN1, HIGH ) ;
-            digitalWrite( IN2,  LOW ) ;
+            digitalWrite( IN1,  LOW ) ;
+            digitalWrite( IN2, HIGH ) ;
         }
     }
     return sm.endState() ;
@@ -221,13 +229,14 @@ StateFunction( accelerateTrain )
     if( sm.entryState() )
     {
         int sample = analogRead( speedPin ) ;
-        setPoint = map( sample, 0 ,1023, 20, 100 ) ; // speed is set between 20 - 100 %
-        speedInterval = 50 ;                         //  50ms between speed increments -> 20 updates per second, max 5 second acceleration at top speed.
+        setPoint = map( sample, 0 ,1023, 20, 100 ) ;                            // speed is set between 20 - 100 %
+        speedInterval = 50 ;                                                    // 50ms between speed increments -> 20 updates per second, max 5 second acceleration at top speed.
+        sm.setTimeout( 500 ) ;                                                  // wait 1s before monitoring detector
         Serial.println(F("points are set\r\ntrain departing")) ;
     }
     if( sm.onState() )
     {
-        if( detectorState == RISING ) sm.exit() ;     // if no current is sensed, the train is on the main track
+        if( detectorState == false && sm.timeOut() ) sm.exit() ;                // if no current is sensed AND 1s has passed the train is on the main track
     }
     if( sm.exitState() )
     {
@@ -247,7 +256,7 @@ StateFunction( waitArrival )
     }
     if( sm.onState() )
     {
-        if( detectorState == FALLING ) sm.exit() ; // just wait on current sense detector...
+        if( detectorState == true ) sm.exit() ; // just wait on current sense detector...
     }
     if( sm.exitState() )
     {
@@ -269,6 +278,7 @@ StateFunction( slowDownTrain )
         int sample ;
         if( digitalRead( relayPin ) == FRONT_SIDE ) sample = analogRead( frontBrakeSpeed ) ; 
         else                                        sample = analogRead(  rearBrakeSpeed ) ;
+
         speedInterval = map( sample, 0 ,1023, 1, 50 ) ;                         // determen brakespeed, depended of relay state
         
         setPoint = 0 ;                                                          // stop train
@@ -294,28 +304,33 @@ StateFunction( slowDownTrain )
 extern uint8_t tramControl()
 {
     debounceInput() ;
-    //shorCircuit() ;
+    shorCircuit() ;
     updateSpeed() ;
     
-    leftPoint.sweep() ;
+    leftPoint.sweep() ;                                                         // sweep the servo motors, if set
     rightPoint.sweep() ;
         
-    if( detectorState == LOW ) digitalWrite( statusLedRear, HIGH ) ;
-    if( detectorState == HIGH ) digitalWrite( statusLedRear, LOW ) ;
+    if( detectorState == false ) digitalWrite( statusLedRear, HIGH ) ;          // delete me, for visual feedback of the detector state.
+    if( detectorState ==  true ) digitalWrite( statusLedRear, LOW ) ;
+
+    if( frontBtnState == LOW && rearBtnState == LOW )                           // if both these buttons are pressed, reset the state machine
+    {
+        sm.nextState( readButtons, 5000 ) ;
+    }
 
     STATE_MACHINE_BEGIN
 
     State(readButtons) {
-        sm.nextState( accelerateTrain, 300 ) ; } // short delay to set the points
+        sm.nextState( accelerateTrain, 300 ) ; }                                // short delay to set the points
 
     State(accelerateTrain) {
-        sm.nextState( waitArrival, 1000 ) ; } // 1 second delay to ensure the sensor won't bounce or something
+        sm.nextState( waitArrival, 1000 ) ; }                                   // 1 second delay to ensure the sensor won't bounce or something
 
     State(waitArrival) {
         sm.nextState( slowDownTrain, 0 ) ; }
 
     State(slowDownTrain) {
-        sm.nextState( readButtons, 5000 ) ; } // wait 5 seconds before another train is allowed to depart
+        sm.nextState( readButtons, 5000 ) ; }                                   // wait 5 seconds before another train is allowed to depart
 
     STATE_MACHINE_END
 }
