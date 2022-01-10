@@ -10,10 +10,10 @@
 11	JP2	INPUT_PULLUP
 12	JP3	INPUT_PULLUP
 13	relayPin	OUTPUT
-A1	shortCircuitPin	INPUT
+A0	shortCircuitPin	INPUT
+A1	speedPin	INPUT
 A2	auto_manualPin	INPUT_PULLUP
 A3	frontSwPin	INPUT_PULLUP
 A4	rearSwPin	INPUT_PULLUP
-A5	speedPin	INPUT
 A6	frontBrakeSpeed	INPUT
 A7	rearBrakeSpeed	INPUT

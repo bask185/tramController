@@ -14,10 +14,10 @@ extern void initIO(void) {
 	pinMode(JP3, INPUT_PULLUP);
 	pinMode(relayPin, OUTPUT);
 	pinMode(shortCircuitPin, INPUT);
+	pinMode(speedPin, INPUT);
 	pinMode(auto_manualPin, INPUT_PULLUP);
 	pinMode(frontSwPin, INPUT_PULLUP);
 	pinMode(rearSwPin, INPUT_PULLUP);
-	pinMode(speedPin, INPUT);
 	pinMode(frontBrakeSpeed, INPUT);
 	pinMode(rearBrakeSpeed, INPUT);
 }

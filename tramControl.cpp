@@ -9,6 +9,7 @@
 #include "src/debounceClass.h"
 #include "src/macros.h"
 
+
 enum tramControlStates_
 {
     tramControlIDLE,
@@ -32,7 +33,7 @@ Debounce frontBtn( frontSwPin ) ;
 Debounce rearBtn( rearSwPin ) ; 
 Debounce autoManualBtn( auto_manualPin) ;
 
-Weistra throttle( throttlePin ) ;
+Weistra throttle( throttlePin, 50, 100 ) ;
 bool power ;
                                 //   min  max spd  turn off
 ServoSweep  leftPoint(  leftServoPin, 75, 105, 10, 1 ) ;
@@ -73,12 +74,13 @@ extern void tramControlInit(void)
 
 static void debounceInput()
 {
+    static uint8_t counter ;
     REPEAT_MS( 20 )
     {
-        static byte counter ;
-        if( digitalRead( detectorPin ) ) == LOW )                               // if the detector only even smells a train, the detector state is considered true
-            detectorState = true ;
-            counter = 10 ;                                                      // a timeout will be set at 10 x 20 = 200ms
+        if( digitalRead( detectorPin ) == LOW )                               // if the detector only even smells a train, the detector state is considered true
+        {
+            detectorState = true  ;
+            counter = 100 ;                                                      // a timeout will be set at 10 x 20 = 200ms
         }
         if( counter ) counter -- ;                                              // decrement this counter every 20ms
         if( counter == 0 ) detectorState = false ;                              // if the detector has not sensed a train for atleast 200ms, the detectorstate will be false
@@ -86,6 +88,7 @@ static void debounceInput()
         frontBtn.debounceInputs() ;
         rearBtn.debounceInputs() ;
         autoManualBtn.debounceInputs() ;
+
     } END_REPEAT
     
     frontBtnState   = frontBtn.readInput() ;
@@ -104,10 +107,10 @@ void updateSpeed()
 
         if( speed != speedPrev)
         {   speedPrev = speed ;
+
             throttle.setSpeed( speed ) ;
+            //Serial.println(speed);
             
-            // Serial.print(F("speed: ")) ;
-            // Serial.println( speed ) ;
         }
     } END_REPEAT
     
@@ -141,14 +144,14 @@ void shorCircuit()
         {
             shorCircuitInterval = 5000 ;                                        // cut off power for atleast 5 seconds
             power = false ;
-            throttle.stop() ;
+            throttle.setState( 0 ) ;
         }
     }
     else
     {
         shorCircuitInterval = 5 ;                                               // enable power again, and set interval at 5ms again
         power = true ;                                                
-        throttle.begin() ;
+        throttle.setState( 1 ) ;
     }
 
     END_REPEAT
@@ -199,6 +202,8 @@ StateFunction( readButtons )
         {
             Serial.println(F("automatic mode enabled")) ;
             digitalWrite( relayPin, !digitalRead( relayPin ) ) ; // if driving in automatic mode, just toggle the relay and turn both LEDs OFF
+            digitalWrite( statusLedFront, LOW ) ;
+            digitalWrite( statusLedRear,  LOW ) ;
         }
         
         Serial.println(F(" setting points ")) ;
@@ -229,14 +234,18 @@ StateFunction( accelerateTrain )
     if( sm.entryState() )
     {
         int sample = analogRead( speedPin ) ;
-        setPoint = map( sample, 0 ,1023, 20, 100 ) ;                            // speed is set between 20 - 100 %
-        speedInterval = 50 ;                                                    // 50ms between speed increments -> 20 updates per second, max 5 second acceleration at top speed.
-        sm.setTimeout( 500 ) ;                                                  // wait 1s before monitoring detector
+        sample = map( sample, 0 ,1023, 5, 150 ) ; 
+        speedInterval = sample ; 
+
+
+        setPoint = 100  ;// map( sample, 0 ,1023, 20, 100 ) ;                            // speed is set between 20 - 100 %
+                                                           // 50ms between speed increments -> 20 updates per second, max 5 second acceleration at top speed.
+        sm.setTimeout( 1000 ) ;                                                  // wait 1s before monitoring detector
         Serial.println(F("points are set\r\ntrain departing")) ;
     }
     if( sm.onState() )
     {
-        if( detectorState == false && sm.timeOut() ) sm.exit() ;                // if no current is sensed AND 1s has passed the train is on the main track
+        if( detectorState == false && sm.timeout() ) sm.exit() ;                // if no current is sensed AND 1s has passed the train is on the main track
     }
     if( sm.exitState() )
     {
@@ -275,11 +284,13 @@ StateFunction( slowDownTrain )
 {
     if( sm.entryState() )
     {
-        int sample ;
-        if( digitalRead( relayPin ) == FRONT_SIDE ) sample = analogRead( frontBrakeSpeed ) ; 
-        else                                        sample = analogRead(  rearBrakeSpeed ) ;
+        int sample = analogRead( speedPin );
+        // if( digitalRead( relayPin ) == FRONT_SIDE ) sample = analogRead( frontBrakeSpeed ) ; 
+        // else                                        sample = analogRead(  rearBrakeSpeed ) ;
 
-        speedInterval = map( sample, 0 ,1023, 1, 50 ) ;                         // determen brakespeed, depended of relay state
+        //speedInterval = 50;//map( sample, 0 ,1023, 1, 50 ) ;                         // determen brakespeed, depended of relay state
+        sample = map( sample, 0 ,1023, 20, 200 ) ; 
+        speedInterval = sample ; 
         
         setPoint = 0 ;                                                          // stop train
         
@@ -304,14 +315,15 @@ StateFunction( slowDownTrain )
 extern uint8_t tramControl()
 {
     debounceInput() ;
-    shorCircuit() ;
+    // shorCircuit() ;
     updateSpeed() ;
+    // digitalWrite( throttlePin, HIGH ) ;
     
     leftPoint.sweep() ;                                                         // sweep the servo motors, if set
     rightPoint.sweep() ;
         
-    if( detectorState == false ) digitalWrite( statusLedRear, HIGH ) ;          // delete me, for visual feedback of the detector state.
-    if( detectorState ==  true ) digitalWrite( statusLedRear, LOW ) ;
+    //if( detectorState == false ) digitalWrite( statusLedRear, LOW ) ;          // delete me, for visual feedback of the detector state.
+    //if( detectorState ==  true ) digitalWrite( statusLedRear, HIGH ) ;
 
     if( frontBtnState == LOW && rearBtnState == LOW )                           // if both these buttons are pressed, reset the state machine
     {
