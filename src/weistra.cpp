@@ -19,31 +19,25 @@ void Weistra::begin()
 
 void Weistra::update() 
 {
-    if( state == 0 )
-    {
-        *portx_p &= ~trackPin ;
-        return ;
-    }
-
     if( portx_p != 0 )
     {
         uint32_t currentTime = micros() ; 
 
         if( currentTime - prevTime >= intervalTime )
         { 
-            prevTime = currentTime ;
+            prevTime = currentTime;
 
             if( counter == 0 && newDutyCycle > 0 )      // if counter reaches 100, reset it to 0 and enable the track power pin
             {
-                dutyCycle = newDutyCycle ;              // a new dutycucle can only be accepted on the beginning of a cycle, this prevents weird jumps of the trains
                 *portx_p |=  trackPin ;
+                dutyCycle = newDutyCycle ;              // a new dutycucle can only be accepted on the beginning of a cycle, this prevents weird jumps of the trains
                 intervalTime = newIntervalTime ;        // new speed is accepted at the beginning of a cycle
             }
-            if( counter >= dutyCycle /*&& dutyCycle < 100*/ ) // commented code seems buggy??
+            if( counter == dutyCycle /*&& dutyCycle < 100*/ ) // commented code seems buggy??
             {
-                *portx_p &= ~trackPin ;
+                *portx_p &= ~trackPin;
             }
-            if( ++counter > 100 ) counter = 0 ;
+            if( ++counter > 100) counter = 0 ;
         }
     }
 }
@@ -58,7 +52,7 @@ void Weistra::setSpeed(byte speed)
     if( newDutyCycle <= 10 ) { frequency = Fmin; }
     else                     { frequency = map( newDutyCycle, 10, 100, Fmin, Fmax ) ; }
 
-    newIntervalTime = 10000 / frequency ; // > between 100us and 500us
+    newIntervalTime = 10000 / frequency; // > between 100us and 500us
 }
 
 void Weistra::setState( uint8_t _state )

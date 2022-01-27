@@ -11,11 +11,11 @@
 #define JP2 11
 #define JP3 12
 #define relayPin 13
-#define shortCircuitPin A1
+#define shortCircuitPin A0
+#define speedPin A1
 #define auto_manualPin A2
 #define frontSwPin A3
 #define rearSwPin A4
-#define speedPin A5
 #define frontBrakeSpeed A6
 #define rearBrakeSpeed A7
 
